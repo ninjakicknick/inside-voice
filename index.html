@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#151917"><title>Inside Voice</title><link rel="stylesheet" href="style.css"></head>
+<body><main><header><div class="mark">shh.</div><h1>Inside Voice</h1><p class="tag">What if YouTubers quit yelling?</p></header>
+<section class="loader"><label for="url">YouTube video</label><div class="urlrow"><input id="url" placeholder="Paste a YouTube link…" inputmode="url"><button id="load">Load video</button></div><p class="hint">Then paste timed captions below. Automatic caption fetching comes next.</p></section>
+<section id="stage" class="stage hidden"><div class="video"><div id="player"></div></div><div class="panel">
+<div class="status"><span id="dot"></span><span id="status">Waiting for captions</span></div>
+<label for="captions">Timed captions</label><textarea id="captions" spellcheck="false" placeholder="0:00  HEY GUYS WELCOME BACK&#10;0:03  TODAY WE'RE PLAYING MINECRAFT&#10;0:07  OH MY GOD THERE'S A CREEPER"></textarea>
+<div class="controls"><button id="inside" class="inside">🤫 Use your inside voice</button><button id="stop" class="secondary">Stop whispering</button></div>
+<div class="now"><span>NOW WHISPERING</span><p id="cue">Nothing yet. Blissful silence.</p></div>
+</div></section>
+<section class="how"><h2>Proof-of-concept mode</h2><p>This first build tests the important bit: muting YouTube and replacing speech on the same timeline. It uses your browser's built-in speech voice, pitched down and slowed slightly. Once this feels right, we'll swap in real whispered TTS and automatic captions.</p></section>
+</main><script src="https://www.youtube.com/iframe_api"></script><script src="app.js"></script></body></html>
