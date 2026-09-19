@@ -21,8 +21,15 @@ export default async function handler(req,res){
     if(!r.ok){
       const detail=await r.text();
       console.error('OpenAI TTS error',r.status,detail);
+      let parsed={};try{parsed=JSON.parse(detail)}catch{}
+      const code=parsed?.error?.code||parsed?.error?.type||'';
       if(r.status===401||r.status===403)return res.status(502).json({error:'The whisper service rejected the OpenAI API key.'});
-      if(r.status===429)return res.status(429).json({error:'Inside Voice temporarily hit its whisper limit.'});
+      if(r.status===429){
+        if(/credit_balance_exhausted|insufficient_quota/i.test(code))return res.status(429).json({error:'The OpenAI API account has no available credit. Add API billing/credits, then try again.'});
+        if(/spend_limit_exceeded|usage_limit_exceeded/i.test(code))return res.status(429).json({error:'The OpenAI API account has reached its spending or usage limit.'});
+        const retryAfter=r.headers.get('retry-after');
+        return res.status(429).json({error:retryAfter?'The whisper service is rate-limited. Try again in about '+retryAfter+' seconds.':'The whisper service is being rate-limited. Try again shortly.'});
+      }
       return res.status(502).json({error:'The whisper service could not generate this line.'});
     }
     const audio=Buffer.from(await r.arrayBuffer());
