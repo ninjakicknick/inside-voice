@@ -1,5 +1,6 @@
 let player,timer,cues=[],lastCue=-1,pendingVideoId=null,insideVoiceOn=false,currentWhisper=new Audio();
 const whisperCache=new Map();
+const whisperRequests=new Map();
 const $=id=>document.getElementById(id);
 let ytReadyResolve;
 const ytReady=new Promise(resolve=>ytReadyResolve=resolve);
@@ -15,7 +16,7 @@ $('load').onclick=async()=>{
   try{const result=await getCaptions(id);cues=result.cues;setStatus(cues.length+' caption cues ready · '+result.source);$('cue').textContent='Ready. Press play, then use your inside voice.'}
   catch(e){cues=[];setStatus(e.message);$('cue').textContent='This video refuses to use its inside voice.'}
   pendingVideoId=id;
-  insideVoiceOn=false;clearInterval(timer);currentWhisper.pause();currentWhisper.removeAttribute('src');currentWhisper.load();lastCue=-1;for(const url of whisperCache.values())URL.revokeObjectURL(url);whisperCache.clear();
+  insideVoiceOn=false;clearInterval(timer);currentWhisper.pause();currentWhisper.removeAttribute('src');currentWhisper.load();lastCue=-1;for(const url of whisperCache.values())URL.revokeObjectURL(url);whisperCache.clear();whisperRequests.clear();
   const frame=$('player');
   frame.src='https://www.youtube-nocookie.com/embed/'+encodeURIComponent(id)+'?playsinline=1&rel=0&enablejsapi=1&origin='+encodeURIComponent(location.origin);
   try{
@@ -37,32 +38,35 @@ $('load').onclick=async()=>{
     });
   }catch(e){setStatus(e.message)}
 };
+async function getWhisperUrl(index){
+  if(whisperCache.has(index))return whisperCache.get(index);
+  if(whisperRequests.has(index))return whisperRequests.get(index);
+  const request=(async()=>{
+    const cue=cues[index];if(!cue)throw new Error('Missing transcript cue.');
+    const r=await fetch('/api/whisper',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:cue.text})});
+    if(!r.ok){const data=await r.json().catch(()=>({}));throw new Error(data.error||'Whisper generation failed.')}
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    whisperCache.set(index,url);
+    return url;
+  })().finally(()=>whisperRequests.delete(index));
+  whisperRequests.set(index,request);
+  return request;
+}
 async function whisper(index){
   const cue=cues[index];if(!cue)return;
   $('cue').textContent=cue.text.toLowerCase();
   try{
-    let url=whisperCache.get(index);
-    if(!url){
-      const r=await fetch('/api/whisper',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:cue.text})});
-      if(!r.ok){const data=await r.json().catch(()=>({}));throw new Error(data.error||'Whisper generation failed.')}
-      const blob=await r.blob();url=URL.createObjectURL(blob);whisperCache.set(index,url);
-    }
+    const url=await getWhisperUrl(index);
     if(!insideVoiceOn||lastCue!==index)return;
     currentWhisper.pause();
     currentWhisper.src=url;
     currentWhisper.volume=.9;
     currentWhisper.currentTime=0;
     await currentWhisper.play();
+    // Prefetch only one line ahead, after the current line has succeeded.
+    getWhisperUrl(index+1).catch(()=>{});
   }catch(e){setStatus(e.message||'The whisper voice failed.')}
-}
-function prefetchWhispers(from){
-  for(let i=from;i<Math.min(from+3,cues.length);i++){
-    if(whisperCache.has(i))continue;
-    fetch('/api/whisper',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:cues[i].text})})
-      .then(r=>r.ok?r.blob():Promise.reject())
-      .then(blob=>whisperCache.set(i,URL.createObjectURL(blob)))
-      .catch(()=>{});
-  }
 }
 function tick(){
   if(!insideVoiceOn||!player?.getCurrentTime||!cues.length)return;
@@ -73,7 +77,7 @@ function tick(){
     // Don't speak a stale cue after a large seek or during a transcript gap.
     const cue=cues[i],end=cue.time+Math.max(cue.duration||0,2.5);
     lastCue=i;
-    if(t<=end){whisper(i);prefetchWhispers(i+1);}
+    if(t<=end)whisper(i);
   }
 }
 $('inside').onclick=()=>{
