@@ -1,4 +1,4 @@
-let player,timer,cues=[],lastCue=-1,pendingVideoId=null,insideVoiceOn=false,currentWhisper=null;
+let player,timer,cues=[],lastCue=-1,pendingVideoId=null,insideVoiceOn=false,currentWhisper=new Audio();
 const whisperCache=new Map();
 const $=id=>document.getElementById(id);
 let ytReadyResolve;
@@ -15,7 +15,7 @@ $('load').onclick=async()=>{
   try{const result=await getCaptions(id);cues=result.cues;setStatus(cues.length+' caption cues ready · '+result.source);$('cue').textContent='Ready. Press play, then use your inside voice.'}
   catch(e){cues=[];setStatus(e.message);$('cue').textContent='This video refuses to use its inside voice.'}
   pendingVideoId=id;
-  insideVoiceOn=false;clearInterval(timer);currentWhisper?.pause();lastCue=-1;for(const url of whisperCache.values())URL.revokeObjectURL(url);whisperCache.clear();
+  insideVoiceOn=false;clearInterval(timer);currentWhisper.pause();currentWhisper.removeAttribute('src');currentWhisper.load();lastCue=-1;for(const url of whisperCache.values())URL.revokeObjectURL(url);whisperCache.clear();
   const frame=$('player');
   frame.src='https://www.youtube-nocookie.com/embed/'+encodeURIComponent(id)+'?playsinline=1&rel=0&enablejsapi=1&origin='+encodeURIComponent(location.origin);
   try{
@@ -31,7 +31,7 @@ $('load').onclick=async()=>{
         },
         onStateChange:e=>{
           if(e.data===YT.PlayerState.PLAYING&&insideVoiceOn) tick();
-          if(e.data===YT.PlayerState.PAUSED||e.data===YT.PlayerState.ENDED) currentWhisper?.pause();
+          if(e.data===YT.PlayerState.PAUSED||e.data===YT.PlayerState.ENDED) currentWhisper.pause();
         }
       }
     });
@@ -48,9 +48,10 @@ async function whisper(index){
       const blob=await r.blob();url=URL.createObjectURL(blob);whisperCache.set(index,url);
     }
     if(!insideVoiceOn||lastCue!==index)return;
-    currentWhisper?.pause();
-    currentWhisper=new Audio(url);
+    currentWhisper.pause();
+    currentWhisper.src=url;
     currentWhisper.volume=.9;
+    currentWhisper.currentTime=0;
     await currentWhisper.play();
   }catch(e){setStatus(e.message||'The whisper voice failed.')}
 }
@@ -78,8 +79,11 @@ function tick(){
 $('inside').onclick=()=>{
   if(!cues.length){setStatus('No captions available');return}
   if(!player?.getCurrentTime){setStatus('YouTube controls are still loading…');return}
+  // Unlock this persistent audio element inside the user's tap. Mobile browsers
+  // may reject play() on Audio objects created later by an async TTS request.
+  currentWhisper.muted=true;currentWhisper.play().catch(()=>{});currentWhisper.pause();currentWhisper.muted=false;
   insideVoiceOn=true;player.mute();lastCue=-1;clearInterval(timer);timer=setInterval(tick,150);
   setStatus('Inside voice engaged',true);tick();
 };
-$('stop').onclick=()=>{insideVoiceOn=false;clearInterval(timer);currentWhisper?.pause();setStatus('Whispering stopped');$('cue').textContent='Nothing yet. Blissful silence.'};
-document.addEventListener('visibilitychange',()=>{if(document.hidden)currentWhisper?.pause()});
+$('stop').onclick=()=>{insideVoiceOn=false;clearInterval(timer);currentWhisper.pause();setStatus('Whispering stopped');$('cue').textContent='Nothing yet. Blissful silence.'};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)currentWhisper.pause()});
