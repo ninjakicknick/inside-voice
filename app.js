@@ -53,6 +53,24 @@ async function getWhisperUrl(index){
   whisperRequests.set(index,request);
   return request;
 }
+function waitForAudioMetadata(audio){
+  if(Number.isFinite(audio.duration)&&audio.duration>0)return Promise.resolve();
+  return new Promise((resolve,reject)=>{
+    const done=()=>{cleanup();resolve()};
+    const fail=()=>{cleanup();reject(new Error('Could not measure the whisper.'))};
+    const cleanup=()=>{audio.removeEventListener('loadedmetadata',done);audio.removeEventListener('error',fail)};
+    audio.addEventListener('loadedmetadata',done,{once:true});audio.addEventListener('error',fail,{once:true});
+  });
+}
+function fitVideoRate(cue,audioDuration){
+  if(!player?.setPlaybackRate||!Number.isFinite(audioDuration)||audioDuration<=0)return;
+  const spokenWindow=Math.max(cue.duration||0,2.5);
+  const needed=Math.min(1,spokenWindow/audioDuration);
+  let rates=[];try{rates=player.getAvailablePlaybackRates?.()||[]}catch{}
+  const slower=rates.filter(r=>r<=1&&r<=needed+.02).sort((a,b)=>b-a);
+  const rate=slower[0]||rates.filter(r=>r<=1).sort((a,b)=>a-b)[0]||0.5;
+  try{player.setPlaybackRate(rate)}catch{}
+}
 async function whisper(index){
   const cue=cues[index];if(!cue)return;
   $('cue').textContent=cue.text.toLowerCase();
@@ -63,6 +81,8 @@ async function whisper(index){
     currentWhisper.src=url;
     currentWhisper.volume=.9;
     currentWhisper.currentTime=0;
+    await waitForAudioMetadata(currentWhisper);
+    fitVideoRate(cue,currentWhisper.duration);
     await currentWhisper.play();
     // Prefetch only one line ahead, after the current line has succeeded.
     getWhisperUrl(index+1).catch(()=>{});
@@ -89,5 +109,5 @@ $('inside').onclick=()=>{
   insideVoiceOn=true;player.mute();lastCue=-1;clearInterval(timer);timer=setInterval(tick,150);
   setStatus('Inside voice engaged',true);tick();
 };
-$('stop').onclick=()=>{insideVoiceOn=false;clearInterval(timer);currentWhisper.pause();setStatus('Whispering stopped');$('cue').textContent='Nothing yet. Blissful silence.'};
+$('stop').onclick=()=>{insideVoiceOn=false;clearInterval(timer);currentWhisper.pause();try{player?.setPlaybackRate?.(1)}catch{}setStatus('Whispering stopped');$('cue').textContent='Nothing yet. Blissful silence.'};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)currentWhisper.pause()});
