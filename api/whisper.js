@@ -13,7 +13,7 @@ export default async function handler(req,res){
         model:'gpt-4o-mini-tts',
         voice:'coral',
         input:text,
-        instructions:'Speak in a very soft, intimate ASMR-style whisper. Stay calm and understated even when the words are excited, angry, or written in all caps. Never shout. Use a close, breathy, soothing delivery, with natural pacing and very gentle emphasis.',
+        instructions:'Speak in an extremely quiet, close-mic ASMR whisper. Do not use a normal speaking voice. Use almost no vocal projection: breathy, hushed, slow, intimate, and soothing. Imagine someone is asleep beside you and you absolutely must not wake them. Even when the text contains yelling, excitement, anger, exclamation points, or ALL CAPS, stay calm and nearly monotone. Never become energetic, theatrical, or loud. Keep the delivery soft and sleepy, with small relaxed pauses between phrases and only the gentlest emphasis.',
         response_format:'mp3'
       }),
       signal:AbortSignal.timeout(30000)
