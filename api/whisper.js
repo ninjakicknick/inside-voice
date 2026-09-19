@@ -11,7 +11,7 @@ export default async function handler(req,res){
       headers:{'Authorization':'Bearer '+apiKey,'Content-Type':'application/json'},
       body:JSON.stringify({
         model:'gpt-4o-mini-tts',
-        voice:'coral',
+        voice:'shimmer',
         input:text,
         instructions:'Speak in an extremely quiet, close-mic ASMR whisper. Do not use a normal speaking voice. Use almost no vocal projection: breathy, hushed, slow, intimate, and soothing. Imagine someone is asleep beside you and you absolutely must not wake them. Even when the text contains yelling, excitement, anger, exclamation points, or ALL CAPS, stay calm and nearly monotone. Never become energetic, theatrical, or loud. Keep the delivery soft and sleepy, with small relaxed pauses between phrases and only the gentlest emphasis.',
         response_format:'mp3'
