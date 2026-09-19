@@ -1,0 +1,12 @@
+let player, timer, cues=[], lastCue=-1;
+const $=id=>document.getElementById(id);
+window.onYouTubeIframeAPIReady=()=>{};
+function videoId(value){try{const u=new URL(value.trim());if(u.hostname.includes('youtu.be'))return u.pathname.slice(1).split('/')[0];if(u.pathname.includes('/shorts/'))return u.pathname.split('/shorts/')[1].split('/')[0];return u.searchParams.get('v')}catch{return /^[\w-]{11}$/.test(value.trim())?value.trim():null}}
+$('load').onclick=()=>{const id=videoId($('url').value);if(!id){$('url').focus();return} $('stage').classList.remove('hidden'); if(player?.loadVideoById){player.loadVideoById(id);player.mute();return} player=new YT.Player('player',{videoId:id,playerVars:{playsinline:1,rel:0},events:{onReady:e=>e.target.mute()}})};
+function parseTime(s){const p=s.split(':').map(Number);return p.length===3?p[0]*3600+p[1]*60+p[2]:p[0]*60+p[1]}
+function parseCues(){return $('captions').value.split(/\n+/).map(line=>{const m=line.trim().match(/^(\d{1,2}:)?\d{1,2}:\d{2}(?:\.\d+)?\s+(.+)$/);if(!m)return null;const stamp=line.trim().split(/\s+/)[0];return {time:parseTime(stamp),text:line.trim().slice(stamp.length).trim()}}).filter(Boolean).sort((a,b)=>a.time-b.time)}
+function whisper(text){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text.toLowerCase());u.rate=.86;u.pitch=.72;u.volume=.72;const voices=speechSynthesis.getVoices();const soft=voices.find(v=>/samantha|victoria|ava|zira|aria|serena|female/i.test(v.name));if(soft)u.voice=soft;speechSynthesis.speak(u);$('cue').textContent=text.toLowerCase()}
+function tick(){if(!player?.getCurrentTime)return;const t=player.getCurrentTime();let i=-1;for(let n=0;n<cues.length;n++){if(cues[n].time<=t)i=n;else break}if(i>=0&&i!==lastCue){lastCue=i;whisper(cues[i].text)}}
+$('inside').onclick=()=>{cues=parseCues();if(!cues.length){$('status').textContent='Add timed captions first';return}player?.mute();lastCue=-1;clearInterval(timer);timer=setInterval(tick,180);$('status').textContent='Inside voice engaged';document.querySelector('.status').classList.add('active');tick()};
+$('stop').onclick=()=>{clearInterval(timer);speechSynthesis.cancel();$('status').textContent='Whispering stopped';document.querySelector('.status').classList.remove('active');$('cue').textContent='Nothing yet. Blissful silence.'};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)speechSynthesis.cancel()});
