@@ -1,1 +1,1 @@
-{"name":"inside-voice","version":"0.1.0","private":true,"scripts":{"dev":"npx serve .","start":"npx serve ."},"devDependencies":{"serve":"^14.2.4"}}
+{"name":"inside-voice","version":"0.2.0","private":true,"type":"module","scripts":{"dev":"vercel dev"},"dependencies":{"youtube-caption-extractor":"^1.10.2"},"devDependencies":{"vercel":"^48.0.0"}}
