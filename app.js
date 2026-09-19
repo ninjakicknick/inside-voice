@@ -1,4 +1,5 @@
-let player,timer,cues=[],lastCue=-1,pendingVideoId=null,insideVoiceOn=false;
+let player,timer,cues=[],lastCue=-1,pendingVideoId=null,insideVoiceOn=false,currentWhisper=null;
+const whisperCache=new Map();
 const $=id=>document.getElementById(id);
 let ytReadyResolve;
 const ytReady=new Promise(resolve=>ytReadyResolve=resolve);
@@ -14,7 +15,7 @@ $('load').onclick=async()=>{
   try{const result=await getCaptions(id);cues=result.cues;setStatus(cues.length+' caption cues ready · '+result.source);$('cue').textContent='Ready. Press play, then use your inside voice.'}
   catch(e){cues=[];setStatus(e.message);$('cue').textContent='This video refuses to use its inside voice.'}
   pendingVideoId=id;
-  insideVoiceOn=false;clearInterval(timer);speechSynthesis.cancel();lastCue=-1;
+  insideVoiceOn=false;clearInterval(timer);currentWhisper?.pause();lastCue=-1;for(const url of whisperCache.values())URL.revokeObjectURL(url);whisperCache.clear();
   const frame=$('player');
   frame.src='https://www.youtube-nocookie.com/embed/'+encodeURIComponent(id)+'?playsinline=1&rel=0&enablejsapi=1&origin='+encodeURIComponent(location.origin);
   try{
@@ -30,13 +31,38 @@ $('load').onclick=async()=>{
         },
         onStateChange:e=>{
           if(e.data===YT.PlayerState.PLAYING&&insideVoiceOn) tick();
-          if(e.data===YT.PlayerState.PAUSED||e.data===YT.PlayerState.ENDED) speechSynthesis.cancel();
+          if(e.data===YT.PlayerState.PAUSED||e.data===YT.PlayerState.ENDED) currentWhisper?.pause();
         }
       }
     });
   }catch(e){setStatus(e.message)}
 };
-function whisper(text){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text.toLowerCase());u.rate=.86;u.pitch=.72;u.volume=.72;const voices=speechSynthesis.getVoices();const soft=voices.find(v=>/samantha|victoria|ava|zira|aria|serena|female/i.test(v.name));if(soft)u.voice=soft;speechSynthesis.speak(u);$('cue').textContent=text.toLowerCase()}
+async function whisper(index){
+  const cue=cues[index];if(!cue)return;
+  $('cue').textContent=cue.text.toLowerCase();
+  try{
+    let url=whisperCache.get(index);
+    if(!url){
+      const r=await fetch('/api/whisper',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:cue.text})});
+      if(!r.ok){const data=await r.json().catch(()=>({}));throw new Error(data.error||'Whisper generation failed.')}
+      const blob=await r.blob();url=URL.createObjectURL(blob);whisperCache.set(index,url);
+    }
+    if(!insideVoiceOn||lastCue!==index)return;
+    currentWhisper?.pause();
+    currentWhisper=new Audio(url);
+    currentWhisper.volume=.9;
+    await currentWhisper.play();
+  }catch(e){setStatus(e.message||'The whisper voice failed.')}
+}
+function prefetchWhispers(from){
+  for(let i=from;i<Math.min(from+3,cues.length);i++){
+    if(whisperCache.has(i))continue;
+    fetch('/api/whisper',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:cues[i].text})})
+      .then(r=>r.ok?r.blob():Promise.reject())
+      .then(blob=>whisperCache.set(i,URL.createObjectURL(blob)))
+      .catch(()=>{});
+  }
+}
 function tick(){
   if(!insideVoiceOn||!player?.getCurrentTime||!cues.length)return;
   const t=player.getCurrentTime();
@@ -46,7 +72,7 @@ function tick(){
     // Don't speak a stale cue after a large seek or during a transcript gap.
     const cue=cues[i],end=cue.time+Math.max(cue.duration||0,2.5);
     lastCue=i;
-    if(t<=end)whisper(cue.text);
+    if(t<=end){whisper(i);prefetchWhispers(i+1);}
   }
 }
 $('inside').onclick=()=>{
@@ -55,5 +81,5 @@ $('inside').onclick=()=>{
   insideVoiceOn=true;player.mute();lastCue=-1;clearInterval(timer);timer=setInterval(tick,150);
   setStatus('Inside voice engaged',true);tick();
 };
-$('stop').onclick=()=>{insideVoiceOn=false;clearInterval(timer);speechSynthesis.cancel();setStatus('Whispering stopped');$('cue').textContent='Nothing yet. Blissful silence.'};
-document.addEventListener('visibilitychange',()=>{if(document.hidden)speechSynthesis.cancel()});
+$('stop').onclick=()=>{insideVoiceOn=false;clearInterval(timer);currentWhisper?.pause();setStatus('Whispering stopped');$('cue').textContent='Nothing yet. Blissful silence.'};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)currentWhisper?.pause()});
