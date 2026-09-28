@@ -1,0 +1,18 @@
+{
+  "name": "Inside Voice",
+  "short_name": "Inside Voice",
+  "description": "What if YouTubers quit yelling?",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#111513",
+  "theme_color": "#151917",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
