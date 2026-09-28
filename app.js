@@ -28,7 +28,7 @@ function enforcePlaybackRate(attempt=0){
 }
 async function serverCaptions(id){const r=await fetch('/api/captions?videoId='+encodeURIComponent(id));const data=await r.json();if(!r.ok){const e=new Error(data.error||'Could not get captions');e.code=data.code;throw e}return data.cues}
 async function getCaptions(id){return {cues:await serverCaptions(id),source:'supadata'}}
-$('load').onclick=async()=>{
+async function loadVideo(){
   const id=videoId($('url').value);if(!id){$('url').focus();return}
   $('stage').classList.remove('hidden');setStatus('Getting captions…');$('cue').textContent='Getting the transcript…';
   try{const result=await getCaptions(id);cues=result.cues;setStatus(cues.length+' caption cues ready · '+result.source);$('cue').textContent='Ready. Press play, then use your inside voice.'}
@@ -55,7 +55,8 @@ $('load').onclick=async()=>{
       }
     });
   }catch(e){setStatus(e.message)}
-};
+}
+$('load').onclick=loadVideo;
 async function getWhisperUrl(index){
   if(whisperCache.has(index))return whisperCache.get(index);
   if(whisperRequests.has(index))return whisperRequests.get(index);
@@ -107,7 +108,21 @@ $('inside').onclick=()=>{
   insideVoiceOn=true;player.mute();enforcePlaybackRate();lastCue=-1;clearInterval(timer);timer=setInterval(tick,150);
   setStatus('Inside voice engaged',true);tick();
 };
+$('share').onclick=async()=>{
+  const id=pendingVideoId||videoId($('url').value);if(!id){setStatus('Load a video before sharing');return}
+  const shareUrl=new URL(location.origin);shareUrl.searchParams.set('v',id);
+  const data={title:'Inside Voice',text:'Watch this with Inside Voice 🤫',url:shareUrl.toString()};
+  try{
+    if(navigator.share){await navigator.share(data);return}
+    await navigator.clipboard.writeText(shareUrl.toString());setStatus('Inside Voice link copied');
+  }catch(e){if(e?.name!=='AbortError')setStatus('Could not share this link')}
+};
 $('stop').onclick=()=>{insideVoiceOn=false;clearInterval(timer);clearTimeout(rateRetryTimer);currentWhisper.pause();try{player?.setPlaybackRate?.(1)}catch{}setStatus('Whispering stopped');$('cue').textContent='Nothing yet. Blissful silence.'};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)currentWhisper.pause()});
 
+const deepLinkedVideo=new URLSearchParams(location.search).get('v');
+if(deepLinkedVideo&&/^[\w-]{11}$/.test(deepLinkedVideo)){
+  $('url').value='https://www.youtube.com/watch?v='+deepLinkedVideo;
+  window.addEventListener('load',()=>loadVideo());
+}
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}
