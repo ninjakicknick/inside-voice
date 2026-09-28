@@ -8,6 +8,24 @@ window.onYouTubeIframeAPIReady=()=>ytReadyResolve?.();
 if(window.YT?.Player) ytReadyResolve?.();
 function videoId(value){try{const u=new URL(value.trim());if(u.hostname.includes('youtu.be'))return u.pathname.slice(1).split('/')[0];if(u.pathname.includes('/shorts/'))return u.pathname.split('/shorts/')[1].split('/')[0];return u.searchParams.get('v')}catch{return /^[\w-]{11}$/.test(value.trim())?value.trim():null}}
 function setStatus(text,on=false){$('status').textContent=text;document.querySelector('.status')?.classList.toggle('active',on)}
+const INSIDE_VOICE_RATE=0.5;
+let rateRetryTimer=null;
+function enforcePlaybackRate(attempt=0){
+  if(!insideVoiceOn||!player?.setPlaybackRate)return;
+  try{
+    const rates=player.getAvailablePlaybackRates?.()||[];
+    const target=rates.length&& !rates.includes(INSIDE_VOICE_RATE)?rates.filter(r=>r<1).sort((a,b)=>Math.abs(a-INSIDE_VOICE_RATE)-Math.abs(b-INSIDE_VOICE_RATE))[0]||1:INSIDE_VOICE_RATE;
+    player.setPlaybackRate(target);
+    clearTimeout(rateRetryTimer);
+    if(attempt<5){
+      rateRetryTimer=setTimeout(()=>{
+        if(!insideVoiceOn)return;
+        const actual=player.getPlaybackRate?.();
+        if(actual!==target)enforcePlaybackRate(attempt+1);
+      },200);
+    }
+  }catch{}
+}
 async function serverCaptions(id){const r=await fetch('/api/captions?videoId='+encodeURIComponent(id));const data=await r.json();if(!r.ok){const e=new Error(data.error||'Could not get captions');e.code=data.code;throw e}return data.cues}
 async function getCaptions(id){return {cues:await serverCaptions(id),source:'supadata'}}
 $('load').onclick=async()=>{
@@ -25,13 +43,13 @@ $('load').onclick=async()=>{
     // YouTube to replace/create our player element again.
     player=new YT.Player(frame,{
       events:{
-        onReady:e=>{e.target.mute();setStatus(cues.length+' caption cues ready · supadata')},
+        onReady:e=>{e.target.mute();if(insideVoiceOn)enforcePlaybackRate();setStatus(cues.length+' caption cues ready · supadata')},
         onError:e=>{
           const messages={2:'YouTube rejected this video ID.',5:'YouTube could not play this video.',100:'This YouTube video is unavailable.',101:'The creator has disabled embedded playback.',150:'The creator has disabled embedded playback.'};
           setStatus(messages[e.data]||('YouTube player error '+e.data+'.'));
         },
         onStateChange:e=>{
-          if(e.data===YT.PlayerState.PLAYING&&insideVoiceOn) tick();
+          if(e.data===YT.PlayerState.PLAYING&&insideVoiceOn){enforcePlaybackRate();tick();}
           if(e.data===YT.PlayerState.PAUSED||e.data===YT.PlayerState.ENDED) currentWhisper.pause();
         }
       }
@@ -86,8 +104,8 @@ $('inside').onclick=()=>{
   // Unlock this persistent audio element inside the user's tap. Mobile browsers
   // may reject play() on Audio objects created later by an async TTS request.
   currentWhisper.muted=true;currentWhisper.play().catch(()=>{});currentWhisper.pause();currentWhisper.muted=false;
-  insideVoiceOn=true;player.mute();try{player.setPlaybackRate(0.5)}catch{}lastCue=-1;clearInterval(timer);timer=setInterval(tick,150);
+  insideVoiceOn=true;player.mute();enforcePlaybackRate();lastCue=-1;clearInterval(timer);timer=setInterval(tick,150);
   setStatus('Inside voice engaged',true);tick();
 };
-$('stop').onclick=()=>{insideVoiceOn=false;clearInterval(timer);currentWhisper.pause();try{player?.setPlaybackRate?.(1)}catch{}setStatus('Whispering stopped');$('cue').textContent='Nothing yet. Blissful silence.'};
+$('stop').onclick=()=>{insideVoiceOn=false;clearInterval(timer);clearTimeout(rateRetryTimer);currentWhisper.pause();try{player?.setPlaybackRate?.(1)}catch{}setStatus('Whispering stopped');$('cue').textContent='Nothing yet. Blissful silence.'};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)currentWhisper.pause()});
