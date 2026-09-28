@@ -109,3 +109,5 @@ $('inside').onclick=()=>{
 };
 $('stop').onclick=()=>{insideVoiceOn=false;clearInterval(timer);clearTimeout(rateRetryTimer);currentWhisper.pause();try{player?.setPlaybackRate?.(1)}catch{}setStatus('Whispering stopped');$('cue').textContent='Nothing yet. Blissful silence.'};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)currentWhisper.pause()});
+
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}
